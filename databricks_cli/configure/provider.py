@@ -20,24 +20,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import getpass
+
+from abc import abstractmethod, ABCMeta
+from configparser import ConfigParser
 import os
 from os.path import expanduser, join
-from abc import abstractmethod, ABCMeta
-
-from configparser import ConfigParser
 
 from databricks_cli.utils import InvalidConfigurationError
+
 
 _home = expanduser('~')
 CONFIG_FILE_ENV_VAR = "DATABRICKS_CONFIG_FILE"
 HOST = 'host'
 USERNAME = 'username'
-PASSWORD = 'password'  # NOQA
+PASSWORD = 'password' # NOQA
 TOKEN = 'token'
 INSECURE = 'insecure'
 DEFAULT_SECTION = 'DEFAULT'
-DEBUG = 'debug'
 
 # User-provided override for the DatabricksConfigProvider
 _config_provider = None
@@ -233,7 +232,6 @@ class SparkTaskContextConfigProvider(DatabricksConfigProvider):
 
 class EnvironmentVariableConfigProvider(DatabricksConfigProvider):
     """Loads from system environment variables."""
-
     def get_config(self):
         host = os.environ.get('DATABRICKS_HOST')
         username = os.environ.get('DATABRICKS_USERNAME')
@@ -248,7 +246,6 @@ class EnvironmentVariableConfigProvider(DatabricksConfigProvider):
 
 class ProfileConfigProvider(DatabricksConfigProvider):
     """Loads from the databrickscfg file."""
-
     def __init__(self, profile=DEFAULT_SECTION):
         self.profile = profile
 
@@ -259,7 +256,6 @@ class ProfileConfigProvider(DatabricksConfigProvider):
         password = _get_option_if_exists(raw_config, self.profile, PASSWORD)
         token = _get_option_if_exists(raw_config, self.profile, TOKEN)
         insecure = _get_option_if_exists(raw_config, self.profile, INSECURE)
-
         config = DatabricksConfig(host, username, password, token, insecure)
         if config.is_valid:
             return config
@@ -267,16 +263,10 @@ class ProfileConfigProvider(DatabricksConfigProvider):
 
 
 class DatabricksConfig(object):
-    def __init__(self, host, username, password, token, insecure):  # noqa
+    def __init__(self, host, username, password, token, insecure): # noqa
         self.host = host
         self.username = username
         self.password = password
-        if self.password == 'stdin':
-            self.password = getpass.getpass(
-                'Password to connect to databricks at [' + self.host + ']: ')
-        else:
-            self.password = password
-
         self.token = token
         self.insecure = insecure
 
