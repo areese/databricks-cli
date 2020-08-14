@@ -20,6 +20,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import logging
 import time
 from datetime import datetime
 from json import loads as json_loads
@@ -27,12 +28,50 @@ from json import loads as json_loads
 import click
 from tabulate import tabulate
 
-from databricks_cli.click_types import OutputClickType, JsonClickType, ClusterIdClickType
+from databricks_cli.click_types import OutputClickType, JsonClickType, ClusterIdClickType, \
+    OneOfOption
 from databricks_cli.clusters.api import ClusterApi
+from databricks_cli.configure.config import provide_api_client, profile_option, debug_option
 from databricks_cli.utils import eat_exceptions, CONTEXT_SETTINGS, pretty_format, json_cli_base, \
     truncate_string
-from databricks_cli.configure.config import provide_api_client, profile_option, debug_option
 from databricks_cli.version import print_version_callback, version
+
+CLUSTER_OPTIONS = ['cluster-id', 'cluster-name']
+
+logger = logging.getLogger()
+
+
+def get_cluster_name(cluster_api, cluster_id):
+    # type: (ClusterApi, str) -> str
+    data = cluster_api.get_cluster(cluster_id)
+    if not data or 'cluster_name' not in data:
+        logger.debug('No cluster_id {} found'.format(cluster_id))
+        return None
+
+    return data.get('cluster_name')
+
+
+def get_clusters_by_name(api_client, cluster_name):
+    # type: (ClusterApi, str) -> str
+    return ClusterApi(api_client).get_clusters_by_name(cluster_name)
+
+
+def confirm(cluster_api, cluster_id, force, operation, plural_operation):
+    # type: (ClusterApi, str, bool, str, str) -> bool
+    cluster_name = get_cluster_name(cluster_api, cluster_id)
+
+    if not cluster_id:
+        click.echo('Failing due to no cluster_id')
+        return False
+
+    if not force and not click.confirm(
+            'Do you want to {} cluster "{}" "{}"'.format(operation, cluster_name, cluster_id),
+            click.echo(
+                'Not {} cluster "{}" "{}"'.format(plural_operation, cluster_name, cluster_id))):
+        return False
+
+    click.echo('{} cluster "{}" "{}"'.format(plural_operation, cluster_name, cluster_id))
+    return True
 
 
 @click.command(context_settings=CONTEXT_SETTINGS)
@@ -59,11 +98,12 @@ def create_cli(api_client, json_file, json):
               help='File containing JSON request to POST to /api/2.0/clusters/edit.')
 @click.option('--json', default=None, type=JsonClickType(),
               help=JsonClickType.help('/api/2.0/clusters/edit'))
+@click.option("--force", required=False, default=True)
 @debug_option
 @profile_option
 @eat_exceptions
 @provide_api_client
-def edit_cli(api_client, json_file, json):
+def edit_cli(api_client, json_file, json, force):
     """
     Edits a Databricks cluster.
 
@@ -76,7 +116,18 @@ def edit_cli(api_client, json_file, json):
         with open(json_file, 'r') as f:
             json = f.read()
     deser_json = json_loads(json)
-    ClusterApi(api_client).edit_cluster(deser_json)
+
+    cluster_id = deser_json['cluster_id']
+    cluster_api = ClusterApi(api_client)
+
+    if not confirm(cluster_api=cluster_api,
+                   cluster_id=cluster_id,
+                   force=force,
+                   operation='edit',
+                   plural_operation='editing'):
+        raise RuntimeError('Failed to confirm cluster edit')
+
+    cluster_api.edit_cluster(deser_json)
 
 
 @click.command(context_settings=CONTEXT_SETTINGS,
@@ -100,17 +151,27 @@ def start_cli(api_client, cluster_id):
 @click.command(context_settings=CONTEXT_SETTINGS)
 @click.option('--cluster-id', required=True, type=ClusterIdClickType(),
               help=ClusterIdClickType.help)
+@click.option("--force", required=False, default=True)
 @debug_option
 @profile_option
 @provide_api_client
 @eat_exceptions
-def restart_cli(api_client, cluster_id):
+def restart_cli(api_client, cluster_id, force):
     """
     Restarts a Databricks cluster given its ID.
 
     If the cluster is not currently in a RUNNING state, nothing will happen
     """
-    ClusterApi(api_client).restart_cluster(cluster_id)
+    cluster_api = ClusterApi(api_client)
+
+    if not confirm(cluster_api=cluster_api,
+                   cluster_id=cluster_id,
+                   force=force,
+                   operation='restart',
+                   plural_operation='restarting'):
+        return
+
+    cluster_api.restart_cluster(cluster_id)
 
 
 @click.command(context_settings=CONTEXT_SETTINGS)
@@ -118,11 +179,12 @@ def restart_cli(api_client, cluster_id):
               help=ClusterIdClickType.help)
 @click.option('--num-workers', required=True, type=click.INT,
               help='Number of workers')
+@click.option("--force", required=False, default=True)
 @debug_option
 @profile_option
 @provide_api_client
 @eat_exceptions
-def resize_cli(api_client, cluster_id, num_workers):
+def resize_cli(api_client, cluster_id, num_workers, force):
     """Resizes a Databricks cluster given its ID.
 
     Provide a `--num-workers` parameter to indicate the new cluster size.
@@ -130,17 +192,27 @@ def resize_cli(api_client, cluster_id, num_workers):
     If the cluster is not currently in a RUNNING state, this will cause an
     error to occur.
     """
-    ClusterApi(api_client).resize_cluster(cluster_id, num_workers)
+    cluster_api = ClusterApi(api_client)
+
+    if not confirm(cluster_api=cluster_api,
+                   cluster_id=cluster_id,
+                   force=force,
+                   operation='resize',
+                   plural_operation='resizing'):
+        return
+
+    cluster_api.resize_cluster(cluster_id, num_workers)
 
 
 @click.command(context_settings=CONTEXT_SETTINGS)
 @click.option('--cluster-id', required=True, type=ClusterIdClickType(),
               help=ClusterIdClickType.help)
+@click.option("--force", required=False, default=True)
 @debug_option
 @profile_option
 @eat_exceptions
 @provide_api_client
-def delete_cli(api_client, cluster_id):
+def delete_cli(api_client, cluster_id, force):
     """
     Removes a Databricks cluster given its ID.
 
@@ -150,21 +222,35 @@ def delete_cli(api_client, cluster_id):
 
     Use ``databricks clusters get --cluster-id CLUSTER_ID`` to check termination states.
     """
-    ClusterApi(api_client).delete_cluster(cluster_id)
+    cluster_api = ClusterApi(api_client)
+
+    if not confirm(cluster_api=cluster_api,
+                   cluster_id=cluster_id,
+                   force=force,
+                   operation='delete',
+                   plural_operation='deleting'):
+        return
+
+    cluster_api.delete_cluster(cluster_id)
 
 
 @click.command(context_settings=CONTEXT_SETTINGS)
-@click.option('--cluster-id', required=True, type=ClusterIdClickType(),
-              help=ClusterIdClickType.help)
+@click.option('--cluster-id', cls=OneOfOption, one_of=CLUSTER_OPTIONS,
+              type=ClusterIdClickType(), default=None, help=ClusterIdClickType.help)
+@click.option('--cluster-name', cls=OneOfOption, one_of=CLUSTER_OPTIONS,
+              type=ClusterIdClickType(), default=None, help=ClusterIdClickType.help)
 @debug_option
 @profile_option
 @eat_exceptions
 @provide_api_client
-def get_cli(api_client, cluster_id):
+def get_cli(api_client, cluster_id, cluster_name):
     """
     Retrieves metadata about a cluster.
     """
-    click.echo(pretty_format(ClusterApi(api_client).get_cluster(cluster_id)))
+    if cluster_id is not None:
+        click.echo(pretty_format(ClusterApi(api_client).get_cluster(cluster_id)))
+    else:
+        click.echo(pretty_format(get_clusters_by_name(api_client, cluster_name)))
 
 
 def _clusters_to_table(clusters_json):
@@ -264,18 +350,28 @@ def spark_versions_cli(api_client):
 @click.command(context_settings=CONTEXT_SETTINGS)
 @click.option('--cluster-id', required=True, type=ClusterIdClickType(),
               help=ClusterIdClickType.help)
+@click.option("--force", required=False, default=True)
 @debug_option
 @profile_option
 @eat_exceptions
 @provide_api_client
-def permanent_delete_cli(api_client, cluster_id):
+def permanent_delete_cli(api_client, cluster_id, force):
     """
     Permanently deletes a Spark cluster.
 
     If the cluster is running, it is terminated and its resources are asynchronously removed.
     If the cluster is terminated, then it is immediately removed.
     """
-    ClusterApi(api_client).permanent_delete(cluster_id)
+    cluster_api = ClusterApi(api_client)
+
+    if not confirm(cluster_api=cluster_api,
+                   cluster_id=cluster_id,
+                   force=force,
+                   operation='PERMANENTLY delete',
+                   plural_operation='PERMANENTLY deleting'):
+        return
+
+    cluster_api.permanent_delete(cluster_id)
 
 
 @click.command(context_settings=CONTEXT_SETTINGS)
