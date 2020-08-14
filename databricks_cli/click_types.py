@@ -117,10 +117,8 @@ class OneOfOption(Option):
     def handle_parse_result(self, ctx, opts, args):
         cleaned_opts = set([o.replace('_', '-') for o in opts.keys()])
         if len(cleaned_opts.intersection(set(self.one_of))) == 0:
-            logger.debug('fatal got 0: {}'.format(opts))
             raise MissingParameter('One of {} must be provided.'.format(self.one_of))
         if len(cleaned_opts.intersection(set(self.one_of))) > 1:
-            logger.debug('fatal got 1: {}'.format(opts))
             raise UsageError('Only one of {} should be provided.'.format(self.one_of))
         return super(OneOfOption, self).handle_parse_result(ctx, opts, args)
 
