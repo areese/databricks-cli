@@ -65,6 +65,7 @@ cli.add_command(stack_group, name='stack')
 cli.add_command(groups_group, name='groups')
 cli.add_command(tokens_group, name='tokens')
 cli.add_command(scim_group, name='scim')
+cli.add_command(tokens_group, name='tokens')
 cli.add_command(instance_pools_group, name="instance-pools")
 cli.add_command(pipelines_group, name='pipelines')
 

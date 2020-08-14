@@ -20,18 +20,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from databricks_cli.sdk import TokenService
+
+# pylint:disable=redefined-outer-name
+
+import pytest
+from mock import mock
+
+from click.testing import CliRunner
+import databricks_cli.tokens.cli as cli
 
 
-class TokensApi(object):
-    def __init__(self, api_client):
-        self.client = TokenService(api_client)
+@pytest.fixture()
+def tokens_api_mock():
+    with mock.patch('databricks_cli.tokens.cli.TokensApi') as TokensApi:
+        _tokens_api_mock = mock.MagicMock()
+        TokensApi.return_value = _tokens_api_mock
+        yield _tokens_api_mock
 
-    def create(self, lifetime_seconds, comment):
-        return self.client.create_token(lifetime_seconds, comment)
 
-    def list(self):
-        return self.client.list_tokens()
-
-    def revoke(self, token_id):
-        return self.client.revoke_token(token_id)
+def test_create_token_cli_defaults(tokens_api_mock):
+    runner = CliRunner()
+    runner.invoke(cli.create_token_cli, ['--comment', 'test'])
+    assert tokens_api_mock.create.called_with(60 * 60 * 24 * 90, 'test')

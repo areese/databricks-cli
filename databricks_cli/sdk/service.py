@@ -435,7 +435,7 @@ class PolicyService(object):
             return None
 
         if isinstance(cluster_name, str):
-            cluster_name=unicode(cluster_name)
+            cluster_name = unicode(cluster_name)
 
         # print ('clusters {}'.format(json_dumps(data, indent=4)))
         if 'clusters' not in data:
@@ -775,25 +775,27 @@ class GroupsService(object):
         return self.client.perform_query('GET', '/groups/list-parents', data=_data, headers=headers)
 
 
-class TokensService(object):
+class TokenService(object):
     def __init__(self, client):
         self.client = client
 
-    def create(self, lifetime_seconds, comment, headers=None):
-        _data = {
-            'lifetime_seconds': lifetime_seconds,
-            'comment': comment
-        }
+    def create_token(self, lifetime_seconds=None, comment=None, headers=None):
+        _data = {}
+        if lifetime_seconds is not None:
+            _data['lifetime_seconds'] = lifetime_seconds
+        if comment is not None:
+            _data['comment'] = comment
         return self.client.perform_query('POST', '/token/create', data=_data, headers=headers)
 
-    def list(self, headers=None):
+    def list_tokens(self, headers=None):
         _data = {}
-        return self.client.perform_query('GET', '/token/list', headers=headers)
 
-    def revoke(self, token_id, headers=None):
-        _data = {
-            'token_id': token_id
-        }
+        return self.client.perform_query('GET', '/token/list', data=_data, headers=headers)
+
+    def revoke_token(self, token_id, headers=None):
+        _data = {}
+        if token_id is not None:
+            _data['token_id'] = token_id
         return self.client.perform_query('POST', '/token/delete', data=_data, headers=headers)
 
 
@@ -921,4 +923,3 @@ class DeltaPipelinesService(object):
         _data = {}
 
         return self.client.perform_query('POST', '/pipelines/{pipeline_id}/reset'.format(pipeline_id=pipeline_id), data=_data, headers=headers)
-
