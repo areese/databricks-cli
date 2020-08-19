@@ -45,7 +45,8 @@ def cluster_api_mock():
         _cluster_api_mock = mock.MagicMock()
         ClusterApiMock.return_value = _cluster_api_mock
         # make sure we always get a cluster name back
-        _cluster_api_mock.get_cluster = mock.MagicMock(return_value={'cluster_name': 'test_cluster'})
+        rv = {'cluster_name': 'test_cluster'}
+        _cluster_api_mock.get_cluster = mock.MagicMock(return_value=rv)
 
         yield _cluster_api_mock
 

@@ -33,6 +33,7 @@ from databricks_cli.version import print_version_callback, version
 
 logger = logging.getLogger()
 
+
 def _all_cluster_statuses(api_client):
     click.echo(pretty_format(LibrariesApi(api_client).all_cluster_statuses()))
 
@@ -65,8 +66,8 @@ def _cluster_status(api_client, cluster_id, cluster_name):
             cluster and 'cluster_id' in cluster
         ]
 
-    for cluster_id in cluster_ids:
-        click.echo(pretty_format(libraries_api.cluster_status(cluster_id)))
+    for cid in cluster_ids:
+        click.echo(pretty_format(libraries_api.cluster_status(cid)))
 
 
 @click.command(context_settings=CONTEXT_SETTINGS,

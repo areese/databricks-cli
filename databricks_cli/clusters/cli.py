@@ -20,7 +20,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import logging
+
 import time
 from datetime import datetime
 from json import loads as json_loads
@@ -38,14 +38,12 @@ from databricks_cli.version import print_version_callback, version
 
 CLUSTER_OPTIONS = ['cluster-id', 'cluster-name']
 
-logger = logging.getLogger()
-
 
 def get_cluster_name(cluster_api, cluster_id):
     # type: (ClusterApi, str) -> str
     data = cluster_api.get_cluster(cluster_id)
     if not data or 'cluster_name' not in data:
-        logger.debug('No cluster_id {} found'.format(cluster_id))
+        click.echo('No cluster_id {} found'.format(cluster_id))
         return None
 
     return data.get('cluster_name')
