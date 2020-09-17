@@ -33,25 +33,8 @@ from databricks_cli.click_types import OutputClickType, JsonClickType, ClusterId
 from databricks_cli.clusters.api import ClusterApi
 from databricks_cli.configure.config import provide_api_client, profile_option, debug_option
 from databricks_cli.utils import eat_exceptions, CONTEXT_SETTINGS, pretty_format, json_cli_base, \
-    truncate_string
+    truncate_string, CLUSTER_OPTIONS
 from databricks_cli.version import print_version_callback, version
-
-CLUSTER_OPTIONS = ['cluster-id', 'cluster-name']
-
-
-def get_cluster_name(cluster_api, cluster_id):
-    # type: (ClusterApi, str) -> str
-    data = cluster_api.get_cluster(cluster_id)
-    if not data or 'cluster_name' not in data:
-        click.echo('No cluster_id {} found'.format(cluster_id))
-        return None
-
-    return data.get('cluster_name')
-
-
-def get_clusters_by_name(api_client, cluster_name):
-    # type: (ClusterApi, str) -> str
-    return ClusterApi(api_client).get_clusters_by_name(cluster_name)
 
 
 def confirm(cluster_api, cluster_id, force, operation, plural_operation):
@@ -245,10 +228,14 @@ def get_cli(api_client, cluster_id, cluster_name):
     """
     Retrieves metadata about a cluster.
     """
-    if cluster_id is not None:
-        click.echo(pretty_format(ClusterApi(api_client).get_cluster(cluster_id)))
+    if cluster_id:
+        cluster = ClusterApi(api_client).get_cluster(cluster_id)
+    elif cluster_name:
+        cluster = ClusterApi(api_client).get_cluster_by_name(cluster_name)
     else:
-        click.echo(pretty_format(get_clusters_by_name(api_client, cluster_name)))
+        raise RuntimeError('cluster_name and cluster_id were empty?')
+
+    click.echo(pretty_format(cluster))
 
 
 def _clusters_to_table(clusters_json):
@@ -421,7 +408,7 @@ def cluster_events_cli(api_client, cluster_id, start_time, end_time, order, even
 @debug_option
 @profile_option
 @eat_exceptions
-def clusters_group():
+def clusters_group():  # pragma: no cover
     """
     Utility to interact with Databricks clusters.
     """
