@@ -35,6 +35,7 @@ from databricks_cli.utils import pretty_format
 from tests.test_data import TEST_CLUSTER_ID, TEST_CLUSTER_NAME, CLUSTER_1_RV
 from tests.utils import provide_conf, assert_cli_output
 
+
 CLUSTER_ID = TEST_CLUSTER_ID
 CLUSTER_NAME = TEST_CLUSTER_NAME
 
