@@ -23,9 +23,7 @@
 from enum import Enum
 
 from databricks_cli.sdk.permissions_service import PermissionsService
-
 from .exceptions import PermissionsError
-from ..workspace.api import WorkspaceApi
 
 
 class PermissionTargets(Enum):
@@ -44,9 +42,6 @@ class PermissionTargets(Enum):
     model = registered_models
     models = registered_models
 
-    def to_name(self):
-        return self[self.value]
-
     @classmethod
     def values(cls):
         return [e.value for e in PermissionTargets]
@@ -55,9 +50,18 @@ class PermissionTargets(Enum):
     def help_values(cls):
         return ', '.join([e.value for e in PermissionTargets])
 
+    @classmethod
+    def get(cls, item):
+        if '-' in item:
+            item = item.replace('-', '_')
+        return PermissionTargets[item]
+
 
 class PermissionLevel(Enum):
+    no_permissions = 'NONE'
     manage = 'CAN_MANAGE'
+    manage_staging_versions = 'CAN_MANAGE_STAGING_VERSIONS'
+    manage_production_versions = 'CAN_MANAGE_PRODUCTION_VERSIONS'
     restart = 'CAN_RESTART'
     attach = 'CAN_ATTACH_TO'
     manage_run = 'CAN_MANAGE_RUN'
@@ -66,9 +70,113 @@ class PermissionLevel(Enum):
     read = 'CAN_READ'
     run = 'CAN_RUN'
     edit = 'CAN_EDIT'
+    use = 'CAN_USE'
 
-    def to_name(self):
-        return self[self.value]
+    @classmethod
+    def names(cls):
+        return [e.name for e in PermissionLevel]
+
+    @classmethod
+    def values(cls):
+        return [e.value for e in PermissionLevel]
+
+    @classmethod
+    def help_values(cls):
+        return ', '.join([e.value for e in PermissionLevel])
+
+
+class BasicPermissions(object):
+    def __init__(self, object_type, valid_permissions):
+        self.object_type = object_type
+        self.valid_permissions = valid_permissions
+
+    def is_valid_target(self, permission):
+        # type: (str) -> bool
+        return permission in self.valid_permissions
+
+    def valid_targets(self):
+        return [s.name for s in self.valid_permissions]
+
+
+class TokenPermissions(BasicPermissions):
+    def __init__(self):
+        super().__init__(PermissionTargets.token, {
+            PermissionLevel.no_permissions,
+            PermissionLevel.use,
+            PermissionLevel.manage,
+        })
+
+
+class PasswordPermissions(BasicPermissions):
+    def __init__(self):
+        super().__init__(PermissionTargets.password, {
+            PermissionLevel.no_permissions,
+            PermissionLevel.use,
+        })
+
+
+class ClusterPermissions(BasicPermissions):
+    def __init__(self):
+        super().__init__(PermissionTargets.clusters, {
+            PermissionLevel.no_permissions,
+            PermissionLevel.attach,
+            PermissionLevel.restart,
+            PermissionLevel.manage,
+        })
+
+
+class InstancePoolPermissions(BasicPermissions):
+    def __init__(self):
+        super().__init__(PermissionTargets.instance_pools, {
+            PermissionLevel.no_permissions,
+            PermissionLevel.attach,
+            PermissionLevel.manage,
+        })
+
+
+class JobPermissions(BasicPermissions):
+    def __init__(self):
+        super().__init__(PermissionTargets.jobs, {
+            PermissionLevel.no_permissions,
+            PermissionLevel.view,
+            PermissionLevel.manage_run,
+            PermissionLevel.owner,
+            PermissionLevel.manage,
+        })
+
+
+class NotebookPermissions(BasicPermissions):
+    def __init__(self):
+        super().__init__(PermissionTargets.notebook, {
+            PermissionLevel.no_permissions,
+            PermissionLevel.read,
+            PermissionLevel.run,
+            PermissionLevel.edit,
+            PermissionLevel.manage,
+        })
+
+
+class DirectoryPermissions(BasicPermissions):
+    def __init__(self):
+        super().__init__(PermissionTargets.directory, {
+            PermissionLevel.no_permissions,
+            PermissionLevel.read,
+            PermissionLevel.run,
+            PermissionLevel.edit,
+            PermissionLevel.manage,
+        })
+
+
+class MlFlowPermissions(BasicPermissions):
+    def __init__(self):
+        super().__init__(PermissionTargets.models, {
+            PermissionLevel.no_permissions,
+            PermissionLevel.read,
+            PermissionLevel.edit,
+            PermissionLevel.manage_staging_versions,
+            PermissionLevel.manage_production_versions,
+            PermissionLevel.manage,
+        })
 
 
 class PermissionType(Enum):
@@ -76,11 +184,16 @@ class PermissionType(Enum):
     group = 'group_name'
     service = 'service_principal_name'
 
-    def to_name(self):
-        return self[self.value]
+    @classmethod
+    def values(cls):
+        return [e.value for e in PermissionType]
 
 
-class Lookups(object):
+class PermissionsLookup(object):
+    """
+    static lookup table for permissions
+    """
+
     items = {
         'CAN_MANAGE': PermissionLevel.manage,
         'CAN_RESTART': PermissionLevel.restart,
@@ -95,37 +208,38 @@ class Lookups(object):
         'group_name': PermissionType.group,
         'service_principal_name': PermissionType.service,
 
-        'clusters': PermissionTargets.clusters,
-        'cluster': PermissionTargets.cluster,
-        'directories': PermissionTargets.directories,
-        'directory': PermissionTargets.directory,
-        'instance-pools': PermissionTargets.instance_pools,
-        'instance_pools': PermissionTargets.instance_pool,
-        'jobs': PermissionTargets.jobs,
-        'job': PermissionTargets.job,
-        'notebooks': PermissionTargets.notebooks,
-        'notebook': PermissionTargets.notebook,
-        'registered-models': PermissionTargets.registered_models,
-        'registered_models': PermissionTargets.registered_model,
-        'model': PermissionTargets.model,
-        'models': PermissionTargets.models,
-
+        'clusters': ClusterPermissions(),
+        'cluster': ClusterPermissions(),
+        'directories': DirectoryPermissions(),
+        'directory': DirectoryPermissions(),
+        'instance-pools': InstancePoolPermissions(),
+        'instance_pools': InstancePoolPermissions(),
+        'jobs': JobPermissions(),
+        'job': JobPermissions(),
+        'notebooks': NotebookPermissions(),
+        'notebook': NotebookPermissions(),
+        'registered-models': MlFlowPermissions(),
+        'registered_models': MlFlowPermissions(),
+        'model': MlFlowPermissions(),
+        'models': MlFlowPermissions(),
     }
-
-    @classmethod
-    def from_name(cls, name):
-        return cls.items[name]
 
 
 class Permission(object):
-    def __init__(self, permission_type, value, permission_level):
-        # type: (PermissionType,  str, PermissionLevel) -> None
-        self.permission_type = permission_type
-        self.permission_level = permission_level
-        if value is None:
-            value = ''
+    def __init__(self, object_type, permission_type, permission_level, permission_value):
+        # type: (str, PermissionType,  str, str) -> None
+        self.validator = PermissionsLookup.items[object_type]
 
-        self.value = value
+        if not self.validator.is_valid_target(permission_level):
+            raise PermissionsError(
+                '{} is not a valid target for {}\n'.format(permission_level,
+                                                           self.validator.object_type) +
+
+                'Valid values are {}'.format(self.validator.valid_targets()))
+
+        self.permission_type = permission_type
+        self.permission_level = PermissionLevel[permission_level]
+        self.value = permission_value
 
     def to_dict(self):
         # type: () -> dict
@@ -139,8 +253,10 @@ class Permission(object):
 
 
 class PermissionsObject(object):
-    def __init__(self):
-        self.permissions = []
+    def __init__(self, permissions=None):
+        if not permissions:
+            permissions = []
+        self.permissions = permissions
 
     def add(self, permission):
         # type: (Permission) -> None
@@ -167,7 +283,14 @@ class PermissionsObject(object):
             'access_control_list': [entry.to_dict() for entry in self.permissions]
         }
 
+    def check_if_valid_for(self, object_type):
+        """
+        Check if the permissions are valid for this object type.
+        """
+        pass
 
+
+# FIXME: add set/update permissions, right now this is read only.
 class PermissionsApi(object):
     def __init__(self, api_client):
         self.api_client = api_client
@@ -177,48 +300,44 @@ class PermissionsApi(object):
         # type: (str, str) -> dict
         if not object_type:
             raise PermissionsError('object_type is invalid')
+
         if not object_id:
             object_id = ''
             # raise PermissionsError('object_id is invalid')
 
-        return self.client.get_permissions(object_type=PermissionTargets[object_type].value,
+        return self.client.get_permissions(object_type=PermissionTargets.get(object_type).value,
                                            object_id=object_id)
 
     def get_possible_permissions(self, object_type, object_id):
         # type: (str, str) -> dict
         if not object_type:
             raise PermissionsError('object_type is invalid')
+
         if not object_id:
             raise PermissionsError('object_id is invalid')
 
         return self.client.get_possible_permissions(
-            object_type=PermissionTargets[object_type].value,
+            object_type=PermissionTargets.get(object_type).value,
             object_id=object_id)
 
     def add_permissions(self, object_type, object_id, permissions):
         # type: (str, str, PermissionsObject) -> dict
         if not object_type:
             raise PermissionsError('object_type is invalid')
+
         if not object_id:
             raise PermissionsError('object_id is invalid')
 
-        return self.client.add_permissions(object_type=PermissionTargets[object_type].value,
+        return self.client.add_permissions(object_type=PermissionTargets.get(object_type).value,
                                            object_id=object_id, data=permissions.to_dict())
 
-    def get_id_for_directory(self, path):
-        # type: (str) -> list[str]
-        """
-        Given a path, use the workspaces API to look up the object id.
-        :param path: path to a directory
-        :return: object id, [] if not found
-        """
+    def update_permissions(self, object_type, object_id, permissions):
+        # type: (str, str, PermissionsObject) -> dict
+        if not object_type:
+            raise PermissionsError('object_type is invalid')
 
-        if not path:
-            return []
+        if not object_id:
+            raise PermissionsError('object_id is invalid')
 
-        objects = WorkspaceApi(self.api_client).list_directory_info(path)
-        if not objects:
-            return []
-
-        # ls -d already filtered for us
-        return [workspace_object.object_id for workspace_object in objects]
+        return self.client.update_permissions(object_type=PermissionTargets.get(object_type).value,
+                                              object_id=object_id, data=permissions.to_dict())
